@@ -1,6 +1,8 @@
 import { Connection } from 'post-me';
 import React from 'react';
 import { WorkerMethods } from '../../../worker/types';
+import { freqToNote } from '../circle-chart/utils';
+import { TreeAnimation, useTreeAnimation } from '../tree-animation/tree-animation';
 
 interface PitchSetup {
   analyser?: AnalyserNode;
@@ -21,26 +23,6 @@ interface PitchProps {
   }>;
 }
 
-/**
- * While `enabled` is truthy, get the pitch from the input source,
- * and pass its frequency and clarity to `pitchRenderer`.
- *
- * `pitchRenderer` should be a react component that accepts `freq` and `clarity`
- * props.
- *
- * @export
- * @param {PitchProps} {
- *   stream,
- *   detectorName,
- *   workerConnection,
- *   windowSize,
- *   powerThreshold,
- *   clarityThreshold,
- *   enabled,
- *   pitchRenderer,
- * }
- * @returns
- */
 export function PitchMonitor({
   stream,
   detectorName,
@@ -55,8 +37,8 @@ export function PitchMonitor({
   const [clarity, setClarity] = React.useState<number | null>(null);
   const pendingRef = React.useRef(false);
   const pitchSetupRef = React.useRef<PitchSetup>({});
+  const { setController, startRandomFlight, fly } = useTreeAnimation();
 
-  // Gets called first-thing whenever this component's props change.
   const setupConnection = React.useCallback(async () => {
     await workerConnection
       .remoteHandle()
@@ -64,17 +46,14 @@ export function PitchMonitor({
     const pitchSetup = pitchSetupRef.current;
     pitchSetup.buffer = new Float32Array(windowSize);
     pitchSetup.audioContext = new AudioContext();
-    // Create an AudioNode from the stream.
     const mediaStreamSource = pitchSetup.audioContext.createMediaStreamSource(
       stream
     );
-    // Connect it to the destination.
     pitchSetup.analyser = pitchSetup.audioContext.createAnalyser();
     pitchSetup.analyser.fftSize = windowSize;
     mediaStreamSource.connect(pitchSetup.analyser);
   }, [pitchSetupRef, windowSize, detectorName, stream, workerConnection]);
 
-  // Find the current pitch/clarity and save it in `freq`/`clarity`.
   const updatePitch = React.useCallback(async () => {
     if (!pendingRef.current) {
       pendingRef.current = true;
@@ -102,6 +81,28 @@ export function PitchMonitor({
       if (frequency > 0) {
         setFreq(frequency);
         setClarity(clarity);
+        const { note, octave } = freqToNote(frequency);
+        const colorMap = {
+          'C': 'yellow',
+          'Db': 'orange',
+          'D': 'pink',
+          'Eb': 'red',
+          'E': 'green',
+          'F': 'darkgreen',
+          'Gb': 'blue',
+          'G': 'darkblue',
+          'Ab': 'purple',
+          'A': 'ash',
+          'Bb': 'brown',
+          'B': 'black'
+        };
+        const color = colorMap[note];
+        const randomNum = octave;
+        setTimeout(() => {
+          console.log('Note:', note, 'Octave:', octave);
+          startRandomFlight(color, randomNum);
+        }, 2000);
+       //startRandomFlight(color, randomNum);
       } else {
         setFreq(null);
         setClarity(null);
@@ -114,19 +115,14 @@ export function PitchMonitor({
     pitchSetupRef,
     setFreq,
     setClarity,
+    startRandomFlight,
     powerThreshold,
     clarityThreshold,
     workerConnection,
   ]);
 
-  // This function only gets called when the dependencies update, and it automatically
-  // cleans up when it is called subsequent times. It starts an endless loop
-  // of computing the current pitch.
   React.useEffect(() => {
     if (!enabled) {
-      // This function runs whenever the state of `enabled` changes.
-      // When this function is re-run, it automatically cancels the
-      // the audio monitoring, so all we need to do is return here.
       return;
     }
     console.log('Starting audio monitoring.');
@@ -150,5 +146,6 @@ export function PitchMonitor({
   }, [setupConnection, updatePitch, enabled]);
 
   const PitchRenderer = pitchRenderer;
+  return <TreeAnimation onReady={setController} />;
   return <PitchRenderer freq={freq} clarity={clarity} />;
 }

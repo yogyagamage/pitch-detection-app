@@ -9,11 +9,9 @@ import { StoreProvider } from 'easy-peasy';
 import { store } from './model';
 
 ReactDOM.render(
-  <React.StrictMode>
     <StoreProvider store={store}>
       <App />
-    </StoreProvider>
-  </React.StrictMode>,
+    </StoreProvider>,
   document.getElementById('root')
 );
 
